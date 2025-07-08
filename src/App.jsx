@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer
 } from 'recharts';
+import dayjs from 'dayjs';
 
 const STORAGE_KEY = 'exerciseRecords';
 
@@ -11,14 +12,10 @@ export default function App() {
   const [activity, setActivity] = useState('걷기');
   const [fieldLaps, setFieldLaps] = useState(0);
   const [gymLaps, setGymLaps] = useState(0);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [records, setRecords] = useState([]);
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [selectedDateForDelete, setSelectedDateForDelete] = useState(null);
 
-  // 로컬 저장 불러오기
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -26,66 +23,65 @@ export default function App() {
     }
   }, []);
 
-  // 로컬 저장
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   }, [records]);
 
-  const handleSubmit = () => setSubmitted(true);
+  const handleSubmit = () => {
+    setSubmitted(true);
+  };
 
   const handleSave = () => {
-    const total = fieldLaps * 120 + gymLaps * 50;
-    const newRecord = { name, date, activity, meters: total };
-    const filtered = records.filter(r => !(r.name === name && r.date === date && r.activity === activity));
-    setRecords([...filtered, newRecord]);
+    const today = new Date().toISOString().split('T')[0];
+    const meters = fieldLaps * 120 + gymLaps * 50;
+    const newRecord = { name, date: today, meters, activity };
+
+    const updated = [...records.filter(r => !(r.name === name && r.date === today && r.activity === activity)), newRecord];
+    setRecords(updated);
   };
 
-  // 월별 데이터 추출
-  const monthlyRecords = records
-    .filter(r => r.name === name && r.date.startsWith(currentMonth))
-    .reduce((acc, cur) => {
-      if (!acc[cur.date]) acc[cur.date] = { 걷기: 0, 뛰기: 0 };
-      acc[cur.date][cur.activity] += cur.meters;
-      return acc;
-    }, {});
+  const filteredRecords = records.filter(r =>
+    r.name === name && dayjs(r.date).isSame(currentMonth, 'month')
+  );
 
-  // 월 내 모든 날짜 생성
-  const getAllDaysInMonth = (year, month) => {
-    const days = [];
-    const date = new Date(year, month, 1);
-    while (date.getMonth() === month) {
-      days.push(date.toISOString().split('T')[0]);
-      date.setDate(date.getDate() + 1);
-    }
-    return days;
+  const allDatesInMonth = Array.from({ length: currentMonth.daysInMonth() }, (_, i) =>
+    currentMonth.date(i + 1).format('YYYY-MM-DD')
+  );
+
+  const dailyData = allDatesInMonth.map(date => {
+    const walk = filteredRecords
+      .filter(r => r.date === date && r.activity === '걷기')
+      .reduce((sum, r) => sum + r.meters, 0);
+    const run = filteredRecords
+      .filter(r => r.date === date && r.activity === '뛰기')
+      .reduce((sum, r) => sum + r.meters, 0);
+    return { date, 걷기: walk, 뛰기: run };
+  });
+
+  const handlePointClick = (data) => {
+    setSelectedDateForDelete(data.date);
   };
 
-  const year = Number(currentMonth.split('-')[0]);
-  const month = Number(currentMonth.split('-')[1]) - 1;
-  const allDays = getAllDaysInMonth(year, month);
-
-  const graphData = allDays.map(d => ({
-    date: d,
-    걷기: monthlyRecords[d]?.걷기 || 0,
-    뛰기: monthlyRecords[d]?.뛰기 || 0
-  }));
-
-  const changeMonth = (offset) => {
-    const date = new Date(year, month + offset, 1);
-    setCurrentMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  const deleteRecord = () => {
+    if (!selectedDateForDelete) return;
+    const updated = records.filter(r =>
+      !(r.name === name && r.date === selectedDateForDelete)
+    );
+    setRecords(updated);
+    setSelectedDateForDelete(null);
   };
 
   if (!submitted) {
     return (
-      <div style={{ padding: 20, maxWidth: 400, margin: 'auto' }}>
-        <h1>2025. 디지털 기반 체력증진 프로그램</h1>
+      <div style={{ padding: '20px', maxWidth: '400px', margin: 'auto' }}>
+        <h1>2025. 디지털 기반 학생 맞춤교육 체력증진 프로그램</h1>
         <input
           placeholder="이름을 입력하세요"
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={{ width: '100%', padding: 8, fontSize: 16 }}
+          onChange={e => setName(e.target.value)}
+          style={{ width: '100%', padding: '10px', fontSize: '16px' }}
         />
-        <button onClick={handleSubmit} style={{ marginTop: 12, width: '100%', padding: 10 }}>
+        <button onClick={handleSubmit} style={{ width: '100%', marginTop: '10px' }}>
           입장하기
         </button>
       </div>
@@ -93,15 +89,11 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 600, margin: 'auto' }}>
+    <div style={{ padding: '20px', maxWidth: '700px', margin: 'auto' }}>
       <h2>{name}님의 운동 기록</h2>
-      <div style={{ marginBottom: '1rem' }}>
+      <div>
         <div>
-          날짜 선택:
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div>
-          운동 유형:
+          운동 유형:{' '}
           <select value={activity} onChange={(e) => setActivity(e.target.value)}>
             <option>걷기</option>
             <option>뛰기</option>
@@ -112,8 +104,7 @@ export default function App() {
           <input
             type="number"
             value={fieldLaps}
-            onChange={(e) => setFieldLaps(Number(e.target.value))}
-            style={{ marginLeft: '10px', width: '60px' }}
+            onChange={e => setFieldLaps(Number(e.target.value))}
           />
         </div>
         <div>
@@ -121,30 +112,49 @@ export default function App() {
           <input
             type="number"
             value={gymLaps}
-            onChange={(e) => setGymLaps(Number(e.target.value))}
-            style={{ marginLeft: '10px', width: '60px' }}
+            onChange={e => setGymLaps(Number(e.target.value))}
           />
         </div>
-        <button onClick={handleSave} style={{ marginTop: 10, width: '100%', padding: 10 }}>
-          기록 저장
-        </button>
+        <button onClick={handleSave}>기록 저장</button>
       </div>
 
-      <h3>
-        <button onClick={() => changeMonth(-1)}>{'←'}</button>
-        {' '} {currentMonth} {' '}
-        <button onClick={() => changeMonth(1)}>{'→'}</button>
-      </h3>
+      <h3>누적 운동량 그래프 ({currentMonth.format('YYYY년 M월')})</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <button onClick={() => setCurrentMonth(prev => prev.subtract(1, 'month'))}>← 이전 달</button>
+        <button onClick={() => setCurrentMonth(prev => prev.add(1, 'month'))}>다음 달 →</button>
+      </div>
 
-      <LineChart width={500} height={300} data={graphData}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Line type="monotone" dataKey="걷기" stroke="#82ca9d" strokeWidth={2} />
-        <Line type="monotone" dataKey="뛰기" stroke="#8884d8" strokeWidth={2} />
-      </LineChart>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={dailyData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line
+            type="monotone"
+            dataKey="걷기"
+            stroke="#82ca9d"
+            strokeWidth={2}
+            activeDot={{ onClick: (e, payload) => handlePointClick(payload.payload) }}
+          />
+          <Line
+            type="monotone"
+            dataKey="뛰기"
+            stroke="#8884d8"
+            strokeWidth={2}
+            activeDot={{ onClick: (e, payload) => handlePointClick(payload.payload) }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+
+      {selectedDateForDelete && (
+        <div style={{ marginTop: '20px', border: '1px solid red', padding: '10px' }}>
+          <strong>{selectedDateForDelete} 기록을 삭제하시겠습니까?</strong><br />
+          <button onClick={deleteRecord} style={{ color: 'white', backgroundColor: 'red' }}>삭제</button>
+          <button onClick={() => setSelectedDateForDelete(null)} style={{ marginLeft: '10px' }}>취소</button>
+        </div>
+      )}
     </div>
   );
 }
