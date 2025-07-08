@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
 import {
   LineChart,
   Line,
@@ -7,9 +8,9 @@ import {
   Tooltip,
   CartesianGrid,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Dot
 } from 'recharts';
-import dayjs from 'dayjs';
 
 const STORAGE_KEY = 'exerciseRecords';
 
@@ -19,9 +20,9 @@ export default function App() {
   const [activity, setActivity] = useState('걷기');
   const [fieldLaps, setFieldLaps] = useState(0);
   const [gymLaps, setGymLaps] = useState(0);
+  const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [records, setRecords] = useState([]);
-  const [currentMonth, setCurrentMonth] = useState(dayjs().startOf('month'));
-  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [monthOffset, setMonthOffset] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -38,109 +39,100 @@ export default function App() {
 
   const handleSave = () => {
     const total = fieldLaps * 120 + gymLaps * 50;
-    const newRecord = { name, date: selectedDate, meters: total, type: activity };
-    const filtered = records.filter(r => !(r.name === name && r.date === selectedDate && r.type === activity));
-    setRecords([...filtered, newRecord]);
+    const newRecord = { name, date, activity, meters: total };
+
+    const updated = records.filter(r => !(r.name === name && r.date === date && r.activity === activity));
+    updated.push(newRecord);
+    setRecords(updated);
   };
 
-  const handleDotClick = (date, type) => {
-    const confirmDelete = window.confirm(`${date}의 ${type} 기록을 삭제할까요?`);
-    if (!confirmDelete) return;
-    setRecords(records.filter(r => !(r.name === name && r.date === date && r.type === type)));
+  const handleDelete = (targetDate, type) => {
+    setRecords(records.filter(r => !(r.name === name && r.date === targetDate && r.activity === type)));
   };
 
+  const monthStart = dayjs().add(monthOffset, 'month').startOf('month');
+  const monthEnd = dayjs().add(monthOffset, 'month').endOf('month');
   const monthDates = [];
-  const daysInMonth = currentMonth.daysInMonth();
-  for (let i = 1; i <= daysInMonth; i++) {
-    monthDates.push(currentMonth.date(i).format('YYYY-MM-DD'));
+
+  for (let d = monthStart; d.isBefore(monthEnd) || d.isSame(monthEnd); d = d.add(1, 'day')) {
+    monthDates.push(d.format('YYYY-MM-DD'));
   }
 
-  const filtered = records.filter(r => r.name === name && dayjs(r.date).isSame(currentMonth, 'month'));
-  const byType = { 걷기: {}, 뛰기: {} };
+  const filtered = records.filter(r => r.name === name && dayjs(r.date).isSame(monthStart, 'month'));
+  const byType = { '걷기': {}, '뛰기': {} };
+
   monthDates.forEach(date => {
-    byType[“걷기”][date] = 0;
-    byType[“뛰기”][date] = 0;
+    byType['걷기'][date] = 0;
+    byType['뛰기'][date] = 0;
   });
+
   filtered.forEach(r => {
-    byType[r.type][r.date] += r.meters;
+    byType[r.activity][r.date] += r.meters;
   });
 
   const graphData = monthDates.map(date => ({
     date,
-    걷기: byType[“걷기”][date],
-    뛰기: byType[“뛰기”][date]
+    걷기: byType['걷기'][date],
+    뛰기: byType['뛰기'][date],
   }));
 
   if (!submitted) {
     return (
-      <div style={{ padding: 20, maxWidth: 400, margin: 'auto' }}>
-        <h1>2025 체력증진 프로그램</h1>
+      <div style={{ padding: '20px', maxWidth: '400px', margin: 'auto' }}>
+        <h1>2025. 디지털 기반 학생 맞춤교육 체력증진 프로그램</h1>
         <input
-          placeholder="이름을 입력하세요"
+          placeholder='이름을 입력하세요'
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ width: '100%', padding: 8 }}
+          style={{ width: '100%', padding: '8px', fontSize: '16px' }}
         />
-        <button onClick={handleSubmit} style={{ marginTop: 12, width: '100%' }}>
-          입장하기
-        </button>
+        <button onClick={handleSubmit} style={{ marginTop: '12px', width: '100%' }}>입장하기</button>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 700, margin: 'auto' }}>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
       <h2>{name}님의 운동 기록</h2>
-
-      <div style={{ marginBottom: 16 }}>
-        <label>
-          날짜 선택: 
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-        </label>
-        <br />
+      <label>날짜 선택: <input type='date' value={date} onChange={e => setDate(e.target.value)} /></label>
+      <div>
         운동 유형: 
-        <select value={activity} onChange={(e) => setActivity(e.target.value)}>
+        <select value={activity} onChange={e => setActivity(e.target.value)}>
           <option>걷기</option>
           <option>뛰기</option>
         </select>
-        <br />
-        운동장 바퀴(120m):
-        <input type="number" value={fieldLaps} onChange={(e) => setFieldLaps(Number(e.target.value))} />
-        <br />
-        체육관 바퀴(50m):
-        <input type="number" value={gymLaps} onChange={(e) => setGymLaps(Number(e.target.value))} />
-        <br />
-        <button onClick={handleSave} style={{ marginTop: 10 }}>기록 저장</button>
+      </div>
+      <div>
+        운동장(120m) 몇 바퀴? 
+        <input type='number' value={fieldLaps} onChange={e => setFieldLaps(Number(e.target.value))} />
+      </div>
+      <div>
+        체육관(50m) 몇 바퀴? 
+        <input type='number' value={gymLaps} onChange={e => setGymLaps(Number(e.target.value))} />
+      </div>
+      <button onClick={handleSave}>기록 저장</button>
+
+      <h3>누적 운동량 그래프</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <button onClick={() => setMonthOffset(m => m - 1)}>&lt; 이전 달</button>
+        <strong>{monthStart.format('YYYY년 MM월')}</strong>
+        <button onClick={() => setMonthOffset(m => m + 1)}>다음 달 &gt;</button>
       </div>
 
-      <h3>월별 운동량</h3>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-        <button onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}>← 이전 달</button>
-        <span>{currentMonth.format('YYYY년 MM월')}</span>
-        <button onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}>다음 달 →</button>
-      </div>
-
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={graphData} margin={{ top: 20, right: 30, bottom: 5, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" />
+      <ResponsiveContainer width='100%' height={300}>
+        <LineChart data={graphData}>
+          <CartesianGrid strokeDasharray='3 3' />
+          <XAxis dataKey='date' />
           <YAxis />
           <Tooltip />
           <Legend />
-          <Line
-            type="monotone"
-            dataKey="걷기"
-            stroke="#8884d8"
-            activeDot={{ onClick: (e) => handleDotClick(e.payload.date, '걷기') }}
-          />
-          <Line
-            type="monotone"
-            dataKey="뛰기"
-            stroke="#82ca9d"
-            activeDot={{ onClick: (e) => handleDotClick(e.payload.date, '뛰기') }}
-          />
+          <Line type='monotone' dataKey='걷기' stroke='#82ca9d' dot={{ onClick: (e) => handleDelete(e.payload.date, '걷기') }} />
+          <Line type='monotone' dataKey='뛰기' stroke='#8884d8' dot={{ onClick: (e) => handleDelete(e.payload.date, '뛰기') }} />
         </LineChart>
       </ResponsiveContainer>
+      <p style={{ fontSize: '14px', color: 'gray' }}>
+        그래프 점을 클릭하면 해당 날짜의 운동 기록이 삭제됩니다.
+      </p>
     </div>
   );
 }
