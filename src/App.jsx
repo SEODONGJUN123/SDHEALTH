@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer
 } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -13,8 +20,8 @@ export default function App() {
   const [fieldLaps, setFieldLaps] = useState(0);
   const [gymLaps, setGymLaps] = useState(0);
   const [records, setRecords] = useState([]);
-  const [currentMonth, setCurrentMonth] = useState(dayjs());
-  const [selectedDateForDelete, setSelectedDateForDelete] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(dayjs().startOf('month'));
+  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -27,61 +34,54 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   }, [records]);
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-  };
+  const handleSubmit = () => setSubmitted(true);
 
   const handleSave = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const meters = fieldLaps * 120 + gymLaps * 50;
-    const newRecord = { name, date: today, meters, activity };
-
-    const updated = [...records.filter(r => !(r.name === name && r.date === today && r.activity === activity)), newRecord];
-    setRecords(updated);
+    const total = fieldLaps * 120 + gymLaps * 50;
+    const newRecord = { name, date: selectedDate, meters: total, type: activity };
+    const filtered = records.filter(r => !(r.name === name && r.date === selectedDate && r.type === activity));
+    setRecords([...filtered, newRecord]);
   };
 
-  const filteredRecords = records.filter(r =>
-    r.name === name && dayjs(r.date).isSame(currentMonth, 'month')
-  );
+  const handleDotClick = (date, type) => {
+    const confirmDelete = window.confirm(`${date}의 ${type} 기록을 삭제할까요?`);
+    if (!confirmDelete) return;
+    setRecords(records.filter(r => !(r.name === name && r.date === date && r.type === type)));
+  };
 
-  const allDatesInMonth = Array.from({ length: currentMonth.daysInMonth() }, (_, i) =>
-    currentMonth.date(i + 1).format('YYYY-MM-DD')
-  );
+  const monthDates = [];
+  const daysInMonth = currentMonth.daysInMonth();
+  for (let i = 1; i <= daysInMonth; i++) {
+    monthDates.push(currentMonth.date(i).format('YYYY-MM-DD'));
+  }
 
-  const dailyData = allDatesInMonth.map(date => {
-    const walk = filteredRecords
-      .filter(r => r.date === date && r.activity === '걷기')
-      .reduce((sum, r) => sum + r.meters, 0);
-    const run = filteredRecords
-      .filter(r => r.date === date && r.activity === '뛰기')
-      .reduce((sum, r) => sum + r.meters, 0);
-    return { date, 걷기: walk, 뛰기: run };
+  const filtered = records.filter(r => r.name === name && dayjs(r.date).isSame(currentMonth, 'month'));
+  const byType = { 걷기: {}, 뛰기: {} };
+  monthDates.forEach(date => {
+    byType[“걷기”][date] = 0;
+    byType[“뛰기”][date] = 0;
+  });
+  filtered.forEach(r => {
+    byType[r.type][r.date] += r.meters;
   });
 
-  const handlePointClick = (data) => {
-    setSelectedDateForDelete(data.date);
-  };
-
-  const deleteRecord = () => {
-    if (!selectedDateForDelete) return;
-    const updated = records.filter(r =>
-      !(r.name === name && r.date === selectedDateForDelete)
-    );
-    setRecords(updated);
-    setSelectedDateForDelete(null);
-  };
+  const graphData = monthDates.map(date => ({
+    date,
+    걷기: byType[“걷기”][date],
+    뛰기: byType[“뛰기”][date]
+  }));
 
   if (!submitted) {
     return (
-      <div style={{ padding: '20px', maxWidth: '400px', margin: 'auto' }}>
-        <h1>2025. 디지털 기반 학생 맞춤교육 체력증진 프로그램</h1>
+      <div style={{ padding: 20, maxWidth: 400, margin: 'auto' }}>
+        <h1>2025 체력증진 프로그램</h1>
         <input
           placeholder="이름을 입력하세요"
           value={name}
-          onChange={e => setName(e.target.value)}
-          style={{ width: '100%', padding: '10px', fontSize: '16px' }}
+          onChange={(e) => setName(e.target.value)}
+          style={{ width: '100%', padding: 8 }}
         />
-        <button onClick={handleSubmit} style={{ width: '100%', marginTop: '10px' }}>
+        <button onClick={handleSubmit} style={{ marginTop: 12, width: '100%' }}>
           입장하기
         </button>
       </div>
@@ -89,43 +89,39 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '700px', margin: 'auto' }}>
+    <div style={{ padding: 20, maxWidth: 700, margin: 'auto' }}>
       <h2>{name}님의 운동 기록</h2>
-      <div>
-        <div>
-          운동 유형:{' '}
-          <select value={activity} onChange={(e) => setActivity(e.target.value)}>
-            <option>걷기</option>
-            <option>뛰기</option>
-          </select>
-        </div>
-        <div>
-          운동장 (120m) 몇 바퀴?
-          <input
-            type="number"
-            value={fieldLaps}
-            onChange={e => setFieldLaps(Number(e.target.value))}
-          />
-        </div>
-        <div>
-          체육관 (50m) 몇 바퀴?
-          <input
-            type="number"
-            value={gymLaps}
-            onChange={e => setGymLaps(Number(e.target.value))}
-          />
-        </div>
-        <button onClick={handleSave}>기록 저장</button>
+
+      <div style={{ marginBottom: 16 }}>
+        <label>
+          날짜 선택: 
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+        </label>
+        <br />
+        운동 유형: 
+        <select value={activity} onChange={(e) => setActivity(e.target.value)}>
+          <option>걷기</option>
+          <option>뛰기</option>
+        </select>
+        <br />
+        운동장 바퀴(120m):
+        <input type="number" value={fieldLaps} onChange={(e) => setFieldLaps(Number(e.target.value))} />
+        <br />
+        체육관 바퀴(50m):
+        <input type="number" value={gymLaps} onChange={(e) => setGymLaps(Number(e.target.value))} />
+        <br />
+        <button onClick={handleSave} style={{ marginTop: 10 }}>기록 저장</button>
       </div>
 
-      <h3>누적 운동량 그래프 ({currentMonth.format('YYYY년 M월')})</h3>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <button onClick={() => setCurrentMonth(prev => prev.subtract(1, 'month'))}>← 이전 달</button>
-        <button onClick={() => setCurrentMonth(prev => prev.add(1, 'month'))}>다음 달 →</button>
+      <h3>월별 운동량</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}>← 이전 달</button>
+        <span>{currentMonth.format('YYYY년 MM월')}</span>
+        <button onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}>다음 달 →</button>
       </div>
 
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={dailyData}>
+        <LineChart data={graphData} margin={{ top: 20, right: 30, bottom: 5, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" />
           <YAxis />
@@ -134,27 +130,17 @@ export default function App() {
           <Line
             type="monotone"
             dataKey="걷기"
-            stroke="#82ca9d"
-            strokeWidth={2}
-            activeDot={{ onClick: (e, payload) => handlePointClick(payload.payload) }}
+            stroke="#8884d8"
+            activeDot={{ onClick: (e) => handleDotClick(e.payload.date, '걷기') }}
           />
           <Line
             type="monotone"
             dataKey="뛰기"
-            stroke="#8884d8"
-            strokeWidth={2}
-            activeDot={{ onClick: (e, payload) => handlePointClick(payload.payload) }}
+            stroke="#82ca9d"
+            activeDot={{ onClick: (e) => handleDotClick(e.payload.date, '뛰기') }}
           />
         </LineChart>
       </ResponsiveContainer>
-
-      {selectedDateForDelete && (
-        <div style={{ marginTop: '20px', border: '1px solid red', padding: '10px' }}>
-          <strong>{selectedDateForDelete} 기록을 삭제하시겠습니까?</strong><br />
-          <button onClick={deleteRecord} style={{ color: 'white', backgroundColor: 'red' }}>삭제</button>
-          <button onClick={() => setSelectedDateForDelete(null)} style={{ marginLeft: '10px' }}>취소</button>
-        </div>
-      )}
     </div>
   );
 }
